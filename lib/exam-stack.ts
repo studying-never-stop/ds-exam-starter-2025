@@ -141,13 +141,32 @@ export class ExamStack extends cdk.Stack {
     
     topic1.addSubscription(new subs.SqsSubscription(queueA));
 
+    // SNS → SQS 订阅（带过滤器）
+    topic1.addSubscription(
+      new subs.SqsSubscription(queueA, {
+        rawMessageDelivery: true, // 保持原始消息格式
+        filterPolicy: {
+          country: sns.SubscriptionFilter.stringFilter({
+            allowlist: ["Ireland", "China"],
+          }),
+        },
+      })
+    );
+
     const newEventSource = new events.SqsEventSource(queueA, {
       batchSize: 5,
       maxBatchingWindow: cdk.Duration.seconds(5),
     });
     lambdaXFn.addEventSource(newEventSource); 
 
-    topic1.addSubscription(new subs.LambdaSubscription(lambdaYFn));
+    topic1.addSubscription(new subs.LambdaSubscription(lambdaYFn,{
+      filterPolicy: {
+        country: sns.SubscriptionFilter.stringFilter({
+          denylist: ["Ireland", "China"], 
+        }),}
+    }));
+
+    
 
   }
 }
