@@ -1,87 +1,96 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
-
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, DeleteCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DynamoDBClient,
+} from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  QueryCommand,
+} from "@aws-sdk/lib-dynamodb";
 
 const client = createDDbDocClient();
 const TABLE_NAME = process.env.TABLE_NAME!;
+const REGION = process.env.REGION!;
 
-
-export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
+export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
-    console.log("Event: ", JSON.stringify(event));
+    console.log("Received event:", JSON.stringify(event));
 
-    const pathParameters = event?.pathParameters;
-    //路径参数
-    const movieId = pathParameters?.movieId ? parseInt(pathParameters.movieId) : undefined;
-
-    // 获取查询参数 role
+    const movieIdStr = event?.pathParameters?.movieId;
+    const movieId = movieIdStr ? parseInt(movieIdStr) : undefined;
     const role = event.queryStringParameters?.role;
-    
-    if(!role)
 
-    if (!movieId|| !role) {
+    if (!movieId || isNaN(movieId)) {
       return {
-        statusCode: 404,
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ Message: "Missing movie Id or role" }),
+        statusCode: 400,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "Missing or invalid movieId" }),
       };
     }
 
-    const commandOutput = await client.send(
-      new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { 
-          movieId,
-          role
+    // Case 1: Get specific role for the movie
+    if (role) {
+      const getOutput = await client.send(
+        new GetCommand({
+          TableName: TABLE_NAME,
+          Key: {
+            movieId,
+            role,
+          },
+        })
+      );
+
+      if (!getOutput.Item) {
+        return {
+          statusCode: 404,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: `Role '${role}' not found for movieId ${movieId}` }),
+        };
+      }
+
+      return {
+        statusCode: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ data: getOutput.Item }),
+      };
+    }
+
+    // Case 2: Get all roles for the movie
+    const queryOutput = await client.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "movieId = :m",
+        ExpressionAttributeValues: {
+          ":m": movieId,
         },
       })
     );
-    console.log("GetCommand response: ", commandOutput);
-    if (!commandOutput.Item) {
-      return {
-        statusCode: 404,
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ Message: "Invalid movie Id" }),
-      };
-    }
-    
-    const body: any = { data: commandOutput.Item };
 
-    
     return {
       statusCode: 200,
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({body}),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ data: queryOutput.Items }),
     };
   } catch (error: any) {
-    console.log(JSON.stringify(error));
+    console.error("Handler error:", error);
     return {
       statusCode: 500,
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ error }),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ error: error.message || error }),
     };
   }
 };
 
 function createDDbDocClient() {
-  const ddbClient = new DynamoDBClient({ region: process.env.REGION });
-  const marshallOptions = {
-    convertEmptyValues: true,
-    removeUndefinedValues: true,
-    convertClassInstanceToMap: true,
-  };
-  const unmarshallOptions = {
-    wrapNumbers: false,
-  };
-  const translateConfig = { marshallOptions, unmarshallOptions };
-  return DynamoDBDocumentClient.from(ddbClient, translateConfig);
+  const ddbClient = new DynamoDBClient({ region: REGION });
+  return DynamoDBDocumentClient.from(ddbClient, {
+    marshallOptions: {
+      convertEmptyValues: true,
+      removeUndefinedValues: true,
+      convertClassInstanceToMap: true,
+    },
+    unmarshallOptions: {
+      wrapNumbers: false,
+    },
+  });
 }

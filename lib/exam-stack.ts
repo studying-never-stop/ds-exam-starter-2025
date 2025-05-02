@@ -138,8 +138,6 @@ export class ExamStack extends cdk.Stack {
         REGION: "eu-west-1",
       },
     });
-    
-    topic1.addSubscription(new subs.SqsSubscription(queueA));
 
     // SNS → SQS 订阅（带过滤器）
     topic1.addSubscription(
