@@ -70,7 +70,30 @@ export class ExamStack extends cdk.Stack {
       },
     });
 
+    table.grantReadWriteData(question1Fn)
+
+    const newApi = new apig.RestApi(this, "NewExamAPI", {
+      description: "Exam api",
+      deployOptions: {
+        stageName: "crew",
+      },
+      defaultCorsPreflightOptions: {
+        allowHeaders: ["Content-Type", "X-Amz-Date"],
+        allowMethods: ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"],
+        allowCredentials: true,
+        allowOrigins: ["*"],
+      },
+    });
+
     const anEndpoint = api.root.addResource("patha");
+    const crewEndpoint = newApi.root.addResource("movies");
+    const moviesEndpoint = crewEndpoint.addResource("{movieId}");
+    moviesEndpoint.addMethod(
+      "GET",
+      new apig.LambdaIntegration(question1Fn, { proxy: true })
+    );
+
+
 
 
     // ==================================
