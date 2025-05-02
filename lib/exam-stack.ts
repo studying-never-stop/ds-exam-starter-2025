@@ -164,7 +164,10 @@ export class ExamStack extends cdk.Stack {
         }),}
     }));
 
-    
+    // 输出 Topic ARN、Bucket 名称、表名（供 CLI 使用）
+      new cdk.CfnOutput(this, "statusTopicArn", {
+        value: topic1.topicArn,
+      });
 
   }
 }
