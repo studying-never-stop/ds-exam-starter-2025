@@ -1,7 +1,12 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, QueryCommand, QueryCommandInput, ScanCommand } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, DeleteCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
+import Ajv from "ajv";
+import schema from "../shared/types.schema.json";
+
+const ajv = new Ajv();
+const isValidBodyParams = ajv.compile(schema.definitions["MovieCast"] || {});
 
 const client = createDDbDocClient();
 const TABLE_NAME = process.env.TABLE_NAME!;
@@ -19,7 +24,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
     const role = event.queryStringParameters?.role;
   
 
-    if (!movieId|| !role) {
+    if (!movieId) {
       return {
         statusCode: 404,
         headers: {
@@ -29,28 +34,21 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
       };
     }
 
-    if(role){}
-    const commandOutput = await client.send(
-      new GetCommand({
+    if(!role){
+      let commandInput: QueryCommandInput = {
         TableName: process.env.TABLE_NAME,
-        Key: { 
-          movieId,
-          role
-        },
-      })
-    );
-    console.log("GetCommand response: ", commandOutput);
-    if (!commandOutput.Item) {
-      return {
-        statusCode: 404,
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ Message: "Invalid movie Id" }),
       };
-    }
-    
-    const body: any = { data: commandOutput.Item };
+      commandInput = {
+        ...commandInput,
+        KeyConditionExpression: "movieId = :m",
+        ExpressionAttributeValues: {
+          ":m": movieId,
+          },
+        }
+        const commandOutput = await client.send(
+          new QueryCommand(commandInput)
+          );
+      const body: any = { data: commandOutput.Items };
 
     
     return {
@@ -58,8 +56,52 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify({body}),
+      body: JSON.stringify({role}),
     };
+    } else {
+      const commandOutput = await client.send(
+        new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { 
+            movieId,
+            role
+          },
+        })
+      );
+      console.log("GetCommand response: ", commandOutput);
+      if (!commandOutput.Item) {
+        return {
+          statusCode: 404,
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ Message: "Invalid movie Id" }),
+        };
+      }
+      const body: any = { data: commandOutput.Item };
+
+    
+    return {
+      statusCode: 200,
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({role}),
+    };
+    }
+
+    
+    
+    // const body: any = { data: commandOutput.Item };
+
+    
+    // return {
+    //   statusCode: 200,
+    //   headers: {
+    //     "content-type": "application/json",
+    //   },
+    //   body: JSON.stringify({body}),
+    // };
   } catch (error: any) {
     console.log(JSON.stringify(error));
     return {

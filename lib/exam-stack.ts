@@ -139,6 +139,16 @@ export class ExamStack extends cdk.Stack {
       },
     });
     
+    topic1.addSubscription(new subs.SqsSubscription(queueA));
+
+    const newEventSource = new events.SqsEventSource(queueA, {
+      batchSize: 5,
+      maxBatchingWindow: cdk.Duration.seconds(5),
+    });
+    lambdaXFn.addEventSource(newEventSource); 
+
+    topic1.addSubscription(new subs.LambdaSubscription(lambdaYFn));
+
   }
 }
   
